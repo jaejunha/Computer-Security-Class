@@ -1,5 +1,5 @@
-# OpenSSL-Study
-Study for OpenSSL.  
+# Computer-Security-Class
+Study for Computer Security.  
 
 ---
 
