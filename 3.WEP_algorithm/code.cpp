@@ -62,14 +62,14 @@ void inputKey(Bit *key) {
 			k = tolower(input[i]) - 'a' + 10;
 
 		for (int j = 0; j < 4; j++) {
-			key[4 * i + 3 - j] = !(k % 2);
+			key[4 * i + 3 - j] = k % 2;
 			k = k >> 1;
 		}
 	}
 
 	printf("Initial Vector: ");
 	for (int i = 0; i < SIZE_KEY; i++) {
-		if (key[i] == 0)
+		if (key[i])
 			printf("1");
 		else
 			printf("0");
