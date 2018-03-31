@@ -9,10 +9,12 @@ using namespace std;
 #define SIZE_KEY 40
 #define SIZE_BYTE_IV SIZE_IV/8
 #define SIZE_BYTE_KEY SIZE_KEY/8
+#define SIZE_BYTE_CHECKSUM 4
 
 #define SIZE_BUFFER 100
 
 #define SIZE_BYTE 256
+
 
 typedef bool Bit;
 typedef unsigned char Byte;
@@ -20,12 +22,14 @@ typedef unsigned char Byte;
 void makeIV(Bit *iv);
 void inputKey(Bit *key);
 void makeSeed(Byte *seed, Bit *iv, Bit *key);
-void inputPlainText(char *plainText);
+void inputText(Byte *input, int *length);
+void makeCheckSum(Byte *input, int length, Byte *checkSum);
+void mergeCheckSum(Byte *plainText, Byte *input, Byte *checkSum, int *length);
 void initRC4(Byte *S, Byte *K, Byte *seed);
 void shuffle(Byte *S, Byte *K);
 void makeKeystream(Byte *S, Byte* keyStream, int length);
-void encryption(char *plainText, char * cyperText, Byte *keyStream);
-void decryption(char *plainText, char * cyperText, Byte *keyStream);
+void encryption(Byte *plainText, Byte * cyperText, Byte *keyStream, int length);
+void decryption(Byte *plainText, Byte * cyperText, Byte *keyStream, int length);
 
 int main() {
 
@@ -33,8 +37,11 @@ int main() {
 	Bit key[SIZE_KEY];
 	Byte seed[SIZE_BYTE_IV + SIZE_BYTE_KEY + 1];
 
-	char plainText[SIZE_BUFFER];
-	char cipherText[SIZE_BUFFER];
+	Byte input[SIZE_BUFFER];
+	Byte plainText[SIZE_BUFFER];
+	Byte cipherText[SIZE_BUFFER];
+	Byte checkSum[SIZE_BYTE_CHECKSUM + 1];
+	int length;
 
 	Byte S[SIZE_BYTE];
 	Byte K[SIZE_BYTE];
@@ -43,14 +50,17 @@ int main() {
 	makeIV(iv);
 	inputKey(key);
 	makeSeed(seed, iv, key);
-	inputPlainText(plainText);
+	inputText(input, &length);
+	makeCheckSum(input, length, checkSum);
+	mergeCheckSum(plainText, input, checkSum, &length);
+
 
 	initRC4(S, K, seed);
 	shuffle(S, K);
-	makeKeystream(S, keyStream, strlen(plainText));
+	makeKeystream(S, keyStream, length);
 
-	encryption(plainText, cipherText, keyStream);
-	decryption(plainText, cipherText, keyStream);
+	encryption(plainText, cipherText, keyStream, length);
+	decryption(plainText, cipherText, keyStream, length);
 
 	return 0;
 }
@@ -127,13 +137,61 @@ void makeSeed(Byte *seed, Bit *iv, Bit *key) {
 	printf("Seed: \"%s\" is created\n", seed);
 }
 
-void inputPlainText(char *plainText) {
-	printf("Please enter the plain text: ");
-	scanf_s("%s", plainText, SIZE_BUFFER);
+void inputText(Byte *input, int *length) {
+	printf("Please enter the text: ");
+	scanf_s("%s", input, SIZE_BUFFER);
+
+	for (int i = 0; i < SIZE_BUFFER; i++) {
+		if (input[i] == 0) {
+			*length = i;
+			break;
+		}
+	}
+}
+
+void makeCheckSum(Byte *input, int length, Byte *checkSum) {
+	memset(checkSum, 0, SIZE_BYTE_CHECKSUM + 1);
+	unsigned long crc = 0;
+	unsigned long crcTable[SIZE_BYTE];
+
+	/* refer from : http://mwultong.blogspot.com/2007/01/c-crc32-crc32cpp.html */
+	for (int i = 0, j, k; i < SIZE_BYTE; ++i) {
+		k = i;
+		for (j = 0; j < 8; ++j) {
+			if (k & 1) k = (k >> 1) ^ 0xEDB88320;
+			else k >>= 1;
+		}
+		crcTable[i] = k;
+	}
+
+	crc = ~crc;
+	while (length--)
+		crc = crcTable[(crc ^ *(input++)) & 0xFF] ^ (crc >> 8);
+
+	crc = ~crc;
+
+	for (int i = 0; i < SIZE_BYTE_CHECKSUM; i++) {
+		checkSum[i] = crc % 256;
+		crc /= 256;
+	}
+
+	printf("Check Sum: \"%s\" is created\n", checkSum);
+	/* refer from : http://mwultong.blogspot.com/2007/01/c-crc32-crc32cpp.html */
+}
+
+void mergeCheckSum(Byte *plainText, Byte *input, Byte *checkSum, int *length) {
+	memset(plainText, 0, SIZE_BUFFER);
+	for (int i = 0; i < *length; i++)
+		plainText[i] = input[i];
+	for (int i = 0; i < SIZE_BYTE_CHECKSUM; i++) {
+		plainText[i + *length] = checkSum[i];
+	};
+	*length += SIZE_BYTE_CHECKSUM;
+
+	printf("PlainText: \"%s\" is created\n", plainText);
 }
 
 void initRC4(Byte *S, Byte *K, Byte *seed) {
-	int sum;
 	for (int i = 0; i < SIZE_BYTE; i++) {
 		S[i] = i;
 		K[i] = seed[i % (SIZE_BYTE_IV + SIZE_BYTE_KEY)];
@@ -158,22 +216,22 @@ void makeKeystream(Byte *S, Byte* keyStream, int length) {
 	}
 }
 
-void encryption(char *plainText, char *cipherText, Byte *keyStream) {
+void encryption(Byte *plainText, Byte *cipherText, Byte *keyStream, int length) {
 
 	memset(cipherText, 0, SIZE_BUFFER);
 	printf("Result(Encryption) is \"");
-	for (int i = 0; i < strlen(plainText); i++) {
+	for (int i = 0; i < length; i++) {
 		cipherText[i] = plainText[i] ^ keyStream[i];
 		printf("%c", cipherText[i]);
 	}
 	printf("\"\n");
 }
 
-void decryption(char *plainText, char *cipherText, Byte *keyStream) {
+void decryption(Byte *plainText, Byte *cipherText, Byte *keyStream, int length) {
 
 	memset(plainText, 0, SIZE_BUFFER);
 	printf("Result(Decryption) is \"");
-	for (int i = 0; i < strlen(cipherText); i++) {
+	for (int i = 0; i < length; i++) {
 		plainText[i] = cipherText[i] ^ keyStream[i];
 		printf("%c", plainText[i]);
 	}
